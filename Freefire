@@ -1,0 +1,849 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Mobile Battle Royale</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            touch-action: none;
+        }
+        
+        body {
+            font-family: Arial, sans-serif;
+            background: #111;
+            color: white;
+            overflow: hidden;
+            width: 100vw;
+            height: 100vh;
+        }
+        
+        #game-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+        }
+        
+        #game-canvas {
+            display: block;
+            background: linear-gradient(to bottom, #1a2980, #26d0ce);
+        }
+        
+        #ui-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+        
+        #health-bar {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            width: 200px;
+            height: 20px;
+            background: rgba(0, 0, 0, 0.5);
+            border: 2px solid #fff;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        
+        #health-fill {
+            height: 100%;
+            width: 100%;
+            background: linear-gradient(to right, #ff0000, #00ff00);
+            transition: width 0.3s;
+        }
+        
+        #ammo-display {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            font-size: 18px;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 5px 10px;
+            border-radius: 5px;
+        }
+        
+        #weapon-display {
+            position: absolute;
+            bottom: 60px;
+            right: 20px;
+            font-size: 16px;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 5px 10px;
+            border-radius: 5px;
+        }
+        
+        #controls {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            width: 150px;
+            height: 150px;
+            pointer-events: auto;
+        }
+        
+        #joystick {
+            width: 80px;
+            height: 80px;
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            touch-action: none;
+        }
+        
+        #joystick-handle {
+            width: 40px;
+            height: 40px;
+            background: rgba(255, 255, 255, 0.7);
+            border-radius: 50%;
+            position: absolute;
+            top: 20px;
+            left: 20px;
+        }
+        
+        #shoot-button {
+            width: 80px;
+            height: 80px;
+            background: rgba(255, 0, 0, 0.3);
+            border-radius: 50%;
+            position: absolute;
+            bottom: 0;
+            right: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            color: white;
+            pointer-events: auto;
+        }
+        
+        #game-message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 24px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            display: none;
+        }
+        
+        #enemies-left {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            font-size: 18px;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 5px 10px;
+            border-radius: 5px;
+        }
+        
+        #inventory {
+            position: absolute;
+            top: 60px;
+            left: 20px;
+            display: flex;
+            gap: 10px;
+        }
+        
+        .inventory-item {
+            width: 40px;
+            height: 40px;
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid white;
+            border-radius: 5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            pointer-events: auto;
+        }
+        
+        .active-item {
+            border: 2px solid yellow;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="game-canvas"></canvas>
+        
+        <div id="ui-container">
+            <div id="health-bar">
+                <div id="health-fill"></div>
+            </div>
+            
+            <div id="enemies-left">Enemies: 30</div>
+            
+            <div id="inventory">
+                <div class="inventory-item active-item" data-item="gun">🔫</div>
+                <div class="inventory-item" data-item="medkit">❤️</div>
+            </div>
+            
+            <div id="ammo-display">Ammo: 30/90</div>
+            <div id="weapon-display">Weapon: M4A1</div>
+            
+            <div id="controls">
+                <div id="joystick">
+                    <div id="joystick-handle"></div>
+                </div>
+                <div id="shoot-button">🔫</div>
+            </div>
+            
+            <div id="game-message"></div>
+        </div>
+    </div>
+
+    <script>
+        // Game variables
+        const canvas = document.getElementById('game-canvas');
+        const ctx = canvas.getContext('2d');
+        const gameMessage = document.getElementById('game-message');
+        const enemiesLeftDisplay = document.getElementById('enemies-left');
+        const healthFill = document.getElementById('health-fill');
+        const ammoDisplay = document.getElementById('ammo-display');
+        const weaponDisplay = document.getElementById('weapon-display');
+        const joystick = document.getElementById('joystick');
+        const joystickHandle = document.getElementById('joystick-handle');
+        const shootButton = document.getElementById('shoot-button');
+        const inventoryItems = document.querySelectorAll('.inventory-item');
+        
+        // Set canvas size to match window
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        
+        // Game state
+        let gameState = 'playing'; // playing, gameOver, win
+        let player = {
+            x: canvas.width / 2,
+            y: canvas.height / 2,
+            width: 30,
+            height: 50,
+            speed: 5,
+            health: 100,
+            maxHealth: 100,
+            direction: 0, // angle in radians
+            isMoving: false,
+            moveX: 0,
+            moveY: 0,
+            weapon: 'M4A1',
+            ammo: 30,
+            maxAmmo: 90,
+            reloading: false,
+            lastShot: 0,
+            fireRate: 200, // ms between shots
+            activeItem: 'gun'
+        };
+        
+        let enemies = [];
+        let bullets = [];
+        let medkits = [];
+        let covers = [];
+        let weapons = [];
+        let joystickActive = false;
+        let joystickX = 0;
+        let joystickY = 0;
+        let enemiesLeft = 30;
+        let spawnTimer = 0;
+        let spawnInterval = 3000; // 3 seconds between enemy spawns
+        
+        // Initialize game objects
+        function initGame() {
+            // Create covers (obstacles)
+            for (let i = 0; i < 15; i++) {
+                covers.push({
+                    x: Math.random() * (canvas.width - 100),
+                    y: Math.random() * (canvas.height - 100),
+                    width: 80 + Math.random() * 70,
+                    height: 20 + Math.random() * 30
+                });
+            }
+            
+            // Create medkits
+            for (let i = 0; i < 5; i++) {
+                medkits.push({
+                    x: Math.random() * (canvas.width - 30),
+                    y: Math.random() * (canvas.height - 30),
+                    width: 20,
+                    height: 20,
+                    health: 30
+                });
+            }
+            
+            // Create weapons
+            const weaponTypes = ['Pistol', 'Shotgun', 'SMG', 'M4A1', 'Sniper'];
+            for (let i = 0; i < 5; i++) {
+                weapons.push({
+                    x: Math.random() * (canvas.width - 30),
+                    y: Math.random() * (canvas.height - 30),
+                    width: 30,
+                    height: 15,
+                    type: weaponTypes[i],
+                    ammo: [12, 8, 30, 30, 5][i],
+                    fireRate: [500, 800, 150, 200, 1000][i]
+                });
+            }
+            
+            // Initial enemy spawn
+            spawnEnemy();
+        }
+        
+        // Spawn a new enemy
+        function spawnEnemy() {
+            if (enemies.length >= 30) return;
+            
+            // Spawn enemy at random edge of map
+            let side = Math.floor(Math.random() * 4);
+            let x, y;
+            
+            switch(side) {
+                case 0: // top
+                    x = Math.random() * canvas.width;
+                    y = -50;
+                    break;
+                case 1: // right
+                    x = canvas.width + 50;
+                    y = Math.random() * canvas.height;
+                    break;
+                case 2: // bottom
+                    x = Math.random() * canvas.width;
+                    y = canvas.height + 50;
+                    break;
+                case 3: // left
+                    x = -50;
+                    y = Math.random() * canvas.height;
+                    break;
+            }
+            
+            enemies.push({
+                x: x,
+                y: y,
+                width: 30,
+                height: 50,
+                speed: 2 + Math.random() * 1,
+                health: 100,
+                lastShot: 0,
+                fireRate: 1000 + Math.random() * 1000,
+                isMoving: true,
+                moveTimer: 0,
+                moveDirection: Math.random() * Math.PI * 2,
+                moveDuration: 1000 + Math.random() * 2000
+            });
+            
+            enemiesLeft--;
+            enemiesLeftDisplay.textContent = `Enemies: ${enemiesLeft}`;
+        }
+        
+        // Handle player shooting
+        function shoot() {
+            const now = Date.now();
+            if (player.reloading || now - player.lastShot < player.fireRate) return;
+            
+            if (player.ammo <= 0) {
+                reload();
+                return;
+            }
+            
+            player.ammo--;
+            updateAmmoDisplay();
+            
+            // Create bullet
+            bullets.push({
+                x: player.x,
+                y: player.y,
+                width: 5,
+                height: 5,
+                speed: 10,
+                direction: player.direction,
+                damage: 25,
+                owner: 'player'
+            });
+            
+            player.lastShot = now;
+        }
+        
+        // Handle enemy shooting
+        function enemyShoot(enemy) {
+            const now = Date.now();
+            if (now - enemy.lastShot < enemy.fireRate) return;
+            
+            // Calculate direction to player
+            const dx = player.x - enemy.x;
+            const dy = player.y - enemy.y;
+            const direction = Math.atan2(dy, dx);
+            
+            // Create bullet
+            bullets.push({
+                x: enemy.x,
+                y: enemy.y,
+                width: 5,
+                height: 5,
+                speed: 7,
+                direction: direction,
+                damage: 10,
+                owner: 'enemy'
+            });
+            
+            enemy.lastShot = now;
+        }
+        
+        // Reload weapon
+        function reload() {
+            if (player.reloading || player.ammo === player.maxAmmo) return;
+            
+            player.reloading = true;
+            setTimeout(() => {
+                const neededAmmo = player.maxAmmo - player.ammo;
+                player.ammo += neededAmmo;
+                player.reloading = false;
+                updateAmmoDisplay();
+            }, 2000); // 2 second reload time
+        }
+        
+        // Update ammo display
+        function updateAmmoDisplay() {
+            ammoDisplay.textContent = `Ammo: ${player.ammo}/${player.maxAmmo}`;
+            if (player.reloading) {
+                ammoDisplay.textContent += ' (Reloading...)';
+            }
+        }
+        
+        // Use medkit
+        function useMedkit() {
+            if (player.health >= player.maxHealth) return;
+            
+            player.health = Math.min(player.maxHealth, player.health + 50);
+            updateHealthBar();
+            
+            // Switch back to gun after using medkit
+            player.activeItem = 'gun';
+            updateInventoryDisplay();
+        }
+        
+        // Update health bar display
+        function updateHealthBar() {
+            const healthPercent = (player.health / player.maxHealth) * 100;
+            healthFill.style.width = `${healthPercent}%`;
+        }
+        
+        // Update inventory display
+        function updateInventoryDisplay() {
+            inventoryItems.forEach(item => {
+                if (item.dataset.item === player.activeItem) {
+                    item.classList.add('active-item');
+                } else {
+                    item.classList.remove('active-item');
+                }
+            });
+        }
+        
+        // Check collision between two rectangles
+        function checkCollision(rect1, rect2) {
+            return rect1.x < rect2.x + rect2.width &&
+                   rect1.x + rect1.width > rect2.x &&
+                   rect1.y < rect2.y + rect2.height &&
+                   rect1.y + rect1.height > rect2.y;
+        }
+        
+        // Check if point is inside rectangle
+        function pointInRect(x, y, rect) {
+            return x >= rect.x && x <= rect.x + rect.width &&
+                   y >= rect.y && y <= rect.y + rect.height;
+        }
+        
+        // Game loop
+        function gameLoop() {
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw background (simple gradient)
+            const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            gradient.addColorStop(0, '#1a2980');
+            gradient.addColorStop(1, '#26d0ce');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw covers
+            ctx.fillStyle = '#8B4513';
+            covers.forEach(cover => {
+                ctx.fillRect(cover.x, cover.y, cover.width, cover.height);
+            });
+            
+            // Draw medkits
+            ctx.fillStyle = '#FF0000';
+            medkits.forEach(medkit => {
+                ctx.fillRect(medkit.x, medkit.y, medkit.width, medkit.height);
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fillRect(medkit.x + 5, medkit.y + 5, medkit.width - 10, medkit.height - 10);
+                ctx.fillStyle = '#FF0000';
+            });
+            
+            // Draw weapons
+            ctx.fillStyle = '#333';
+            weapons.forEach(weapon => {
+                ctx.fillRect(weapon.x, weapon.y, weapon.width, weapon.height);
+                ctx.fillStyle = '#666';
+                ctx.fillRect(weapon.x + 5, weapon.y + 3, weapon.width - 10, weapon.height - 6);
+                ctx.fillStyle = '#333';
+            });
+            
+            // Update and draw player
+            if (player.isMoving) {
+                let newX = player.x + player.moveX * player.speed;
+                let newY = player.y + player.moveY * player.speed;
+                
+                // Check collision with covers before moving
+                let canMove = true;
+                const playerRect = {
+                    x: newX - player.width/2,
+                    y: newY - player.height/2,
+                    width: player.width,
+                    height: player.height
+                };
+                
+                for (let cover of covers) {
+                    if (checkCollision(playerRect, cover)) {
+                        canMove = false;
+                        break;
+                    }
+                }
+                
+                if (canMove) {
+                    player.x = newX;
+                    player.y = newY;
+                }
+                
+                // Keep player within bounds
+                player.x = Math.max(player.width/2, Math.min(canvas.width - player.width/2, player.x));
+                player.y = Math.max(player.height/2, Math.min(canvas.height - player.height/2, player.y));
+            }
+            
+            // Draw player
+            ctx.save();
+            ctx.translate(player.x, player.y);
+            ctx.rotate(player.direction);
+            ctx.fillStyle = '#00FF00';
+            ctx.fillRect(-player.width/2, -player.height/2, player.width, player.height);
+            
+            // Draw gun
+            ctx.fillStyle = '#333';
+            ctx.fillRect(player.width/2 - 5, -5, 20, 10);
+            ctx.restore();
+            
+            // Update and draw enemies
+            enemies.forEach((enemy, index) => {
+                // Enemy AI - move toward player but sometimes change direction
+                enemy.moveTimer++;
+                if (enemy.moveTimer >= enemy.moveDuration) {
+                    enemy.moveDirection = Math.random() * Math.PI * 2;
+                    enemy.moveTimer = 0;
+                    enemy.moveDuration = 500 + Math.random() * 1500;
+                }
+                
+                // Occasionally shoot at player
+                if (Math.random() < 0.01) {
+                    enemyShoot(enemy);
+                }
+                
+                // Move enemy
+                if (enemy.isMoving) {
+                    const dx = Math.cos(enemy.moveDirection) * enemy.speed;
+                    const dy = Math.sin(enemy.moveDirection) * enemy.speed;
+                    
+                    let newX = enemy.x + dx;
+                    let newY = enemy.y + dy;
+                    
+                    // Check collision with covers
+                    let canMove = true;
+                    const enemyRect = {
+                        x: newX - enemy.width/2,
+                        y: newY - enemy.height/2,
+                        width: enemy.width,
+                        height: enemy.height
+                    };
+                    
+                    for (let cover of covers) {
+                        if (checkCollision(enemyRect, cover)) {
+                            canMove = false;
+                            break;
+                        }
+                    }
+                    
+                    if (canMove) {
+                        enemy.x = newX;
+                        enemy.y = newY;
+                    } else {
+                        // Change direction if hitting a cover
+                        enemy.moveDirection = Math.random() * Math.PI * 2;
+                        enemy.moveTimer = 0;
+                    }
+                    
+                    // Keep enemy within bounds
+                    enemy.x = Math.max(enemy.width/2, Math.min(canvas.width - enemy.width/2, enemy.x));
+                    enemy.y = Math.max(enemy.height/2, Math.min(canvas.height - enemy.height/2, enemy.y));
+                }
+                
+                // Draw enemy
+                ctx.save();
+                ctx.translate(enemy.x, enemy.y);
+                
+                // Calculate direction to player for enemy orientation
+                const dx = player.x - enemy.x;
+                const dy = player.y - enemy.y;
+                const direction = Math.atan2(dy, dx);
+                ctx.rotate(direction);
+                
+                ctx.fillStyle = '#FF0000';
+                ctx.fillRect(-enemy.width/2, -enemy.height/2, enemy.width, enemy.height);
+                
+                // Draw enemy gun
+                ctx.fillStyle = '#333';
+                ctx.fillRect(enemy.width/2 - 5, -5, 15, 10);
+                ctx.restore();
+            });
+            
+            // Update and draw bullets
+            bullets.forEach((bullet, index) => {
+                bullet.x += Math.cos(bullet.direction) * bullet.speed;
+                bullet.y += Math.sin(bullet.direction) * bullet.speed;
+                
+                // Remove bullets that go off screen
+                if (bullet.x < 0 || bullet.x > canvas.width || bullet.y < 0 || bullet.y > canvas.height) {
+                    bullets.splice(index, 1);
+                    return;
+                }
+                
+                // Check collision with covers
+                for (let cover of covers) {
+                    if (pointInRect(bullet.x, bullet.y, cover)) {
+                        bullets.splice(index, 1);
+                        return;
+                    }
+                }
+                
+                // Check collision with player
+                if (bullet.owner === 'enemy') {
+                    const playerRect = {
+                        x: player.x - player.width/2,
+                        y: player.y - player.height/2,
+                        width: player.width,
+                        height: player.height
+                    };
+                    
+                    if (pointInRect(bullet.x, bullet.y, playerRect)) {
+                        player.health -= bullet.damage;
+                        updateHealthBar();
+                        bullets.splice(index, 1);
+                        
+                        if (player.health <= 0) {
+                            gameState = 'gameOver';
+                            showGameMessage('Game Over! You were defeated.');
+                        }
+                        return;
+                    }
+                }
+                
+                // Check collision with enemies
+                if (bullet.owner === 'player') {
+                    for (let i = 0; i < enemies.length; i++) {
+                        const enemy = enemies[i];
+                        const enemyRect = {
+                            x: enemy.x - enemy.width/2,
+                            y: enemy.y - enemy.height/2,
+                            width: enemy.width,
+                            height: enemy.height
+                        };
+                        
+                        if (pointInRect(bullet.x, bullet.y, enemyRect)) {
+                            enemy.health -= bullet.damage;
+                            bullets.splice(index, 1);
+                            
+                            if (enemy.health <= 0) {
+                                enemies.splice(i, 1);
+                                
+                                if (enemies.length === 0 && enemiesLeft === 0) {
+                                    gameState = 'win';
+                                    showGameMessage('Victory! All enemies eliminated.');
+                                }
+                            }
+                            return;
+                        }
+                    }
+                }
+                
+                // Draw bullet
+                ctx.fillStyle = bullet.owner === 'player' ? '#FFFF00' : '#FF0000';
+                ctx.beginPath();
+                ctx.arc(bullet.x, bullet.y, bullet.width/2, 0, Math.PI * 2);
+                ctx.fill();
+            });
+            
+            // Check for medkit pickup
+            medkits.forEach((medkit, index) => {
+                const playerRect = {
+                    x: player.x - player.width/2,
+                    y: player.y - player.height/2,
+                    width: player.width,
+                    height: player.height
+                };
+                
+                if (checkCollision(playerRect, medkit)) {
+                    // Add medkit to inventory (simplified - just increase health)
+                    player.health = Math.min(player.maxHealth, player.health + medkit.health);
+                    updateHealthBar();
+                    medkits.splice(index, 1);
+                }
+            });
+            
+            // Check for weapon pickup
+            weapons.forEach((weapon, index) => {
+                const playerRect = {
+                    x: player.x - player.width/2,
+                    y: player.y - player.height/2,
+                    width: player.width,
+                    height: player.height
+                };
+                
+                if (checkCollision(playerRect, weapon)) {
+                    player.weapon = weapon.type;
+                    player.ammo = weapon.ammo;
+                    player.fireRate = weapon.fireRate;
+                    player.maxAmmo = weapon.ammo * 3;
+                    updateAmmoDisplay();
+                    weaponDisplay.textContent = `Weapon: ${player.weapon}`;
+                    weapons.splice(index, 1);
+                }
+            });
+            
+            // Spawn enemies over time
+            spawnTimer++;
+            if (spawnTimer >= spawnInterval && enemiesLeft > 0) {
+                spawnEnemy();
+                spawnTimer = 0;
+            }
+            
+            // Continue game loop if still playing
+            if (gameState === 'playing') {
+                requestAnimationFrame(gameLoop);
+            }
+        }
+        
+        // Show game message
+        function showGameMessage(message) {
+            gameMessage.textContent = message;
+            gameMessage.style.display = 'block';
+        }
+        
+        // Joystick event handlers
+        joystick.addEventListener('touchstart', handleJoystickStart);
+        joystick.addEventListener('touchmove', handleJoystickMove);
+        joystick.addEventListener('touchend', handleJoystickEnd);
+        
+        function handleJoystickStart(e) {
+            e.preventDefault();
+            joystickActive = true;
+            updateJoystickPosition(e);
+        }
+        
+        function handleJoystickMove(e) {
+            if (!joystickActive) return;
+            e.preventDefault();
+            updateJoystickPosition(e);
+        }
+        
+        function handleJoystickEnd(e) {
+            joystickActive = false;
+            joystickHandle.style.top = '20px';
+            joystickHandle.style.left = '20px';
+            player.isMoving = false;
+            player.moveX = 0;
+            player.moveY = 0;
+        }
+        
+        function updateJoystickPosition(e) {
+            const touch = e.touches[0];
+            const rect = joystick.getBoundingClientRect();
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
+            
+            let deltaX = touch.clientX - centerX;
+            let deltaY = touch.clientY - centerY;
+            
+            // Limit joystick movement to circle
+            const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+            const maxDistance = rect.width / 2;
+            
+            if (distance > maxDistance) {
+                deltaX = (deltaX / distance) * maxDistance;
+                deltaY = (deltaY / distance) * maxDistance;
+            }
+            
+            // Update joystick handle position
+            joystickHandle.style.left = `${20 + deltaX}px`;
+            joystickHandle.style.top = `${20 + deltaY}px`;
+            
+            // Calculate movement direction
+            player.moveX = deltaX / maxDistance;
+            player.moveY = deltaY / maxDistance;
+            player.isMoving = true;
+            
+            // Update player direction
+            player.direction = Math.atan2(deltaY, deltaX);
+        }
+        
+        // Shoot button event handler
+        shootButton.addEventListener('touchstart', function(e) {
+            e.preventDefault();
+            if (player.activeItem === 'gun') {
+                shoot();
+            } else if (player.activeItem === 'medkit') {
+                useMedkit();
+            }
+        });
+        
+        // Inventory selection
+        inventoryItems.forEach(item => {
+            item.addEventListener('touchstart', function(e) {
+                e.preventDefault();
+                player.activeItem = this.dataset.item;
+                updateInventoryDisplay();
+            });
+        });
+        
+        // Handle screen touch for aiming
+        canvas.addEventListener('touchmove', function(e) {
+            if (!joystickActive) {
+                e.preventDefault();
+                const touch = e.touches[0];
+                const rect = canvas.getBoundingClientRect();
+                const touchX = touch.clientX - rect.left;
+                const touchY = touch.clientY - rect.top;
+                
+                // Update player direction to face touch point
+                player.direction = Math.atan2(touchY - player.y, touchX - player.x);
+            }
+        });
+        
+        // Initialize and start the game
+        initGame();
+        gameLoop();
+        
+        // Handle window resize
+        window.addEventListener('resize', function() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        });
+    </script>
+</body>
+</html>
